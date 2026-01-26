@@ -8,13 +8,14 @@ import random
 import zipfile
 import gdown
 
-MODEL_URL = "https://drive.google.com/uc?id=1N24Cmzw_IbMg2VpWG2uSkY5oaKH_D0j1"
+# ================== CONFIG ==================
+
+MODEL_ID = "1N24Cmzw_IbMg2VpWG2uSkY5oaKH_D0j1"
 MODEL_PATH = "snake_classifier_final.pth"
 
-DATASET_URL = "https://drive.google.com/uc?id=1XqEY3l0oIBWfT6XNZx7Ydr4MXcSTVhSG"
+DATASET_ID = "1XqEY3l0oIBWfT6XNZx7Ydr4MXcSTVhSG"
 DATASET_ZIP = "dataset_final.zip"
-DATASET_DIR = "dataset_final"
-DATASET_TRAIN_DIR = os.path.join(DATASET_DIR, "train")
+DATASET_DIR = "dataset_final/train"
 
 IMAGE_SIZE = 384
 CONFIDENCE_THRESHOLD = 0.4
@@ -23,48 +24,51 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 st.set_page_config(
     page_title="Snake Species Classifier",
-    page_icon=":)",
     layout="centered"
 )
 
 st.title("Определение вида змеи по фото")
-st.markdown(
-    "Загрузите фотографию змеи — модель определит **вид** "
-    "и покажет **3 случайных примера этого вида** из датасета."
+st.write(
+    "Загрузите фотографию змеи — модель определит вид "
+    "и покажет 3 случайных примера этого вида из датасета."
 )
 
 def download_model():
     if os.path.exists(MODEL_PATH):
         return
 
-    st.info("Скачивание модели, подождите...")
-    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
-
+    st.info("Скачивание модели...")
+    gdown.download(
+        id=MODEL_ID,
+        output=MODEL_PATH,
+        quiet=False
+    )
 
 def download_and_extract_dataset():
-    if os.path.exists(DATASET_TRAIN_DIR):
+    if os.path.exists(DATASET_DIR):
         return
 
     st.info("Скачивание датасета (первый запуск может быть долгим)...")
-    gdown.download(DATASET_URL, DATASET_ZIP, quiet=False)
 
-    st.info("Распаковка датасета...")
+    gdown.download(
+        id=DATASET_ID,
+        output=DATASET_ZIP,
+        quiet=False
+    )
+
     with zipfile.ZipFile(DATASET_ZIP, "r") as zip_ref:
         zip_ref.extractall(".")
 
     os.remove(DATASET_ZIP)
 
-download_model()
-download_and_extract_dataset()
-
 @st.cache_resource
 def load_model():
     checkpoint = torch.load(
-    MODEL_PATH,
-    map_location=device,
-    weights_only=False
+        MODEL_PATH,
+        map_location=device,
+        weights_only=False
     )
-    
+
     class_to_idx = checkpoint["class_names"]
     idx_to_class = {v: k for k, v in class_to_idx.items()}
     num_classes = len(idx_to_class)
@@ -85,10 +89,7 @@ def load_model():
     classes = [idx_to_class[i] for i in range(num_classes)]
     return model, classes
 
-
-model, classes = load_model()
-
-infer_tfms = transforms.Compose([
+transform = transforms.Compose([
     transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
     transforms.ToTensor(),
     transforms.Normalize(
@@ -97,71 +98,51 @@ infer_tfms = transforms.Compose([
     )
 ])
 
-def predict_species(image):
-    x = infer_tfms(image).unsqueeze(0).to(device)
-
+def predict(image):
+    x = transform(image).unsqueeze(0).to(device)
     with torch.no_grad():
-        logits = model(x)
-        probs = torch.softmax(logits, dim=1)
+        probs = torch.softmax(model(x), dim=1)
 
-    prob, idx = torch.max(probs, dim=1)
-    return classes[idx.item()], float(prob.item())
+    conf, idx = torch.max(probs, dim=1)
+    return classes[idx.item()], float(conf)
 
-
-def get_example_images(species, n=3):
-    class_dir = os.path.join(DATASET_TRAIN_DIR, species)
-
-    if not os.path.exists(class_dir):
+def get_examples(species, n=3):
+    folder = os.path.join(DATASET_DIR, species)
+    if not os.path.exists(folder):
         return []
 
     images = [
-        os.path.join(class_dir, f)
-        for f in os.listdir(class_dir)
-        if f.lower().endswith((".jpg", ".jpeg", ".png"))
+        os.path.join(folder, f)
+        for f in os.listdir(folder)
+        if f.lower().endswith((".jpg", ".png", ".jpeg"))
     ]
 
     return random.sample(images, min(n, len(images)))
 
-uploaded_file = st.file_uploader(
+download_model()
+download_and_extract_dataset()
+model, classes = load_model()
+
+uploaded = st.file_uploader(
     "Загрузите изображение змеи",
     type=["jpg", "jpeg", "png"]
 )
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file).convert("RGB")
-
-    st.image(
-        image,
-        caption="Загруженное изображение",
-        use_column_width=True
-    )
+if uploaded:
+    image = Image.open(uploaded).convert("RGB")
+    st.image(image, use_column_width=True)
 
     if st.button("Определить вид"):
-        with st.spinner("Анализ изображения..."):
-            species, confidence = predict_species(image)
+        species, confidence = predict(image)
 
         if confidence < CONFIDENCE_THRESHOLD:
-            st.warning(
-                "Модель не уверена в результате. "
-                "Попробуйте другое изображение."
-            )
+            st.warning("Модель не уверена в результате")
         else:
-            st.success(f"**Определённый вид:** `{species}`")
-            st.write(f"Уверенность модели: **{confidence:.2%}**")
+            st.success(f"Вид: {species}")
+            st.write(f"Уверенность: {confidence:.2%}")
 
-            st.subheader("Примеры этого вида из датасета")
-            example_images = get_example_images(species)
-
-            if example_images:
-                cols = st.columns(len(example_images))
-                for col, img_path in zip(cols, example_images):
-                    col.image(img_path, use_column_width=True)
-            else:
-                st.info("Нет изображений для этого вида.")
-
-st.markdown("---")
-st.markdown(
-    "<center>ML-классификация змей</center>",
-    unsafe_allow_html=True
-)
-
+            examples = get_examples(species)
+            if examples:
+                cols = st.columns(len(examples))
+                for c, img in zip(cols, examples):
+                    c.image(img, use_column_width=True)
