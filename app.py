@@ -8,10 +8,10 @@ import random
 import requests
 import zipfile
 
-MODEL_URL = "https://drive.google.com/file/d/1N24Cmzw_IbMg2VpWG2uSkY5oaKH_D0j1"
+MODEL_URL = "https://drive.google.com/uc?id=1N24Cmzw_IbMg2VpWG2uSkY5oaKH_D0j1"
 MODEL_PATH = "snake_classifier_final.pth"
 
-DATASET_URL = "https://drive.google.com/file/d/1XqEY3l0oIBWfT6XNZx7Ydr4MXcSTVhSG"
+DATASET_URL = "https://drive.google.com/uc?id=1XqEY3l0oIBWfT6XNZx7Ydr4MXcSTVhSG"
 DATASET_ZIP = "dataset_final.zip"
 DATASET_DIR = "dataset_final"
 DATASET_TRAIN_DIR = "dataset_final/train"
@@ -163,4 +163,5 @@ st.markdown("---")
 st.markdown(
     "<center>ML-классификация змей</center>",
     unsafe_allow_html=True
+
 )
