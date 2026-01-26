@@ -59,8 +59,12 @@ download_and_extract_dataset()
 
 @st.cache_resource
 def load_model():
-    checkpoint = torch.load(MODEL_PATH, map_location=device)
-
+    checkpoint = torch.load(
+    MODEL_PATH,
+    map_location=device,
+    weights_only=False
+    )
+    
     class_to_idx = checkpoint["class_names"]
     idx_to_class = {v: k for k, v in class_to_idx.items()}
     num_classes = len(idx_to_class)
@@ -160,3 +164,4 @@ st.markdown(
     "<center>ML-классификация змей</center>",
     unsafe_allow_html=True
 )
+
