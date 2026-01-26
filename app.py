@@ -8,8 +8,6 @@ import random
 import zipfile
 import gdown
 
-# ================== CONFIG ==================
-
 MODEL_ID = "1N24Cmzw_IbMg2VpWG2uSkY5oaKH_D0j1"
 MODEL_PATH = "snake_classifier_final.pth"
 
@@ -35,14 +33,20 @@ st.write(
 
 def download_model():
     if os.path.exists(MODEL_PATH):
-        return
+        os.remove(MODEL_PATH)
 
     st.info("Скачивание модели...")
     gdown.download(
         id=MODEL_ID,
         output=MODEL_PATH,
-        quiet=False
+        quiet=False,
+        fuzzy=True
     )
+
+    # защита: файл не должен быть слишком маленьким
+    if os.path.getsize(MODEL_PATH) < 1_000_000:
+        raise RuntimeError("Модель скачалась некорректно (слишком маленький файл)")
+
 
 def download_and_extract_dataset():
     if os.path.exists(DATASET_DIR):
@@ -61,7 +65,6 @@ def download_and_extract_dataset():
 
     os.remove(DATASET_ZIP)
 
-@st.cache_resource
 def load_model():
     checkpoint = torch.load(
         MODEL_PATH,
@@ -146,3 +149,4 @@ if uploaded:
                 cols = st.columns(len(examples))
                 for c, img in zip(cols, examples):
                     c.image(img, use_column_width=True)
+
