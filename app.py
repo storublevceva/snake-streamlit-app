@@ -5,8 +5,8 @@ from torchvision import models, transforms
 from PIL import Image
 import os
 import random
-import requests
 import zipfile
+import gdown
 
 MODEL_URL = "https://drive.google.com/uc?id=1N24Cmzw_IbMg2VpWG2uSkY5oaKH_D0j1"
 MODEL_PATH = "snake_classifier_final.pth"
@@ -14,7 +14,7 @@ MODEL_PATH = "snake_classifier_final.pth"
 DATASET_URL = "https://drive.google.com/uc?id=1XqEY3l0oIBWfT6XNZx7Ydr4MXcSTVhSG"
 DATASET_ZIP = "dataset_final.zip"
 DATASET_DIR = "dataset_final"
-DATASET_TRAIN_DIR = "dataset_final/train"
+DATASET_TRAIN_DIR = os.path.join(DATASET_DIR, "train")
 
 IMAGE_SIZE = 384
 CONFIDENCE_THRESHOLD = 0.4
@@ -30,7 +30,7 @@ st.set_page_config(
 st.title("Определение вида змеи по фото")
 st.markdown(
     "Загрузите фотографию змеи — модель определит **вид** "
-    "и покажет **3 примера этого вида** из датасета."
+    "и покажет **3 случайных примера этого вида** из датасета."
 )
 
 def download_model():
@@ -38,29 +38,24 @@ def download_model():
         return
 
     st.info("Скачивание модели, подождите...")
+    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
 
-    response = requests.get(MODEL_URL, stream=True)
-    with open(MODEL_PATH, "wb") as f:
-        for chunk in response.iter_content(chunk_size=1024):
-            if chunk:
-                f.write(chunk)
 
 def download_and_extract_dataset():
     if os.path.exists(DATASET_TRAIN_DIR):
         return
 
-    st.info("Скачивание датасета, подождите (первый запуск может быть долгим)...")
+    st.info("Скачивание датасета (первый запуск может быть долгим)...")
+    gdown.download(DATASET_URL, DATASET_ZIP, quiet=False)
 
-    response = requests.get(DATASET_URL, stream=True)
-    with open(DATASET_ZIP, "wb") as f:
-        for chunk in response.iter_content(chunk_size=1024):
-            if chunk:
-                f.write(chunk)
-
+    st.info("Распаковка датасета...")
     with zipfile.ZipFile(DATASET_ZIP, "r") as zip_ref:
         zip_ref.extractall(".")
 
     os.remove(DATASET_ZIP)
+
+download_model()
+download_and_extract_dataset()
 
 @st.cache_resource
 def load_model():
@@ -74,8 +69,10 @@ def load_model():
         weights=models.EfficientNet_V2_S_Weights.IMAGENET1K_V1
     )
 
-    in_features = model.classifier[1].in_features
-    model.classifier[1] = nn.Linear(in_features, num_classes)
+    model.classifier[1] = nn.Linear(
+        model.classifier[1].in_features,
+        num_classes
+    )
 
     model.load_state_dict(checkpoint["model_state"])
     model.to(device)
@@ -83,6 +80,9 @@ def load_model():
 
     classes = [idx_to_class[i] for i in range(num_classes)]
     return model, classes
+
+
+model, classes = load_model()
 
 infer_tfms = transforms.Compose([
     transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
@@ -103,6 +103,7 @@ def predict_species(image):
     prob, idx = torch.max(probs, dim=1)
     return classes[idx.item()], float(prob.item())
 
+
 def get_example_images(species, n=3):
     class_dir = os.path.join(DATASET_TRAIN_DIR, species)
 
@@ -116,11 +117,6 @@ def get_example_images(species, n=3):
     ]
 
     return random.sample(images, min(n, len(images)))
-
-download_model()
-download_and_extract_dataset()
-
-model, classes = load_model()
 
 uploaded_file = st.file_uploader(
     "Загрузите изображение змеи",
@@ -163,5 +159,4 @@ st.markdown("---")
 st.markdown(
     "<center>ML-классификация змей</center>",
     unsafe_allow_html=True
-
 )
